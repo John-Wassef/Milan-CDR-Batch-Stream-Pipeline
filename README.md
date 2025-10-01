@@ -56,22 +56,16 @@ Below is a high-level diagram of the ETL pipelines (batch and streaming):
 
 ```mermaid
 graph TD
-    A[Raw Data Files (*.txt)] -->|Batch Load| B[Spark Batch ETL]
-    A -->|Streaming Producer| C[Kafka Topic: telecom_events]
-    C -->|Spark Structured Streaming| D[Spark Streaming ETL]
-
+    A[Raw Data Files] -->|Batch Load| B[Spark Batch ETL]
+    A -->|Streaming Producer| C[Kafka Topic]
+    C -->|Spark Streaming| D[Spark Streaming ETL]
     B --> E{Transform & Clean}
     D --> E
-
-    E -->|Fill nulls/negatives with 0| F[Filter cell_id 1-10000]
-    F -->|Extract date/hour| G[Aggregate Daily/Hourly]
-    G --> H[Write Parquet to MinIO<br>s3a://telecom-data/processed]
-
+    E -->|Clean Data| F[Filter Records]
+    F -->|Extract Time| G[Aggregate Data]
+    G --> H[Write to MinIO]
     I[Airflow DAGs] -->|Orchestrate| B
     I -->|Orchestrate| D
-```
-
----
 
 ## ⚙️ Prerequisites
 
