@@ -1,0 +1,222 @@
+services:
+  # ---------------------
+  # Zookeeper
+  # ---------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - milan_network
+
+  # ---------------------
+  # Kafka
+  # ---------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - milan_network
+
+  # ---------------------
+  # Spark Master
+  # ---------------------
+  spark:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: spark
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_MASTER_HOST=spark
+      - SPARK_MASTER_PORT=7077
+      - SPARK_MASTER_WEBUI_PORT=8080
+    ports:
+      - "7077:7077"
+      - "8081:8080"   # Spark Web UI
+    volumes:
+      - ./scripts:/opt/spark/app
+      - ./data:/opt/spark/data
+    networks:
+      - milan_network
+
+  # ---------------------
+  # Spark Worker 1
+  # ---------------------
+  spark-worker-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: spark-worker-1
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark:7077
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=5g
+      - SPARK_WORKER_WEBUI_PORT=8081
+    depends_on:
+      - spark
+    volumes:
+      - ./scripts:/opt/spark/app
+      - ./data:/opt/spark/data
+    networks:
+      - milan_network
+
+  # ---------------------
+  # Spark Worker 2
+  # ---------------------
+  spark-worker-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: spark-worker-2
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark:7077
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=5g
+      - SPARK_WORKER_WEBUI_PORT=8081
+    depends_on:
+      - spark
+    volumes:
+      - ./scripts:/opt/spark/app
+      - ./data:/opt/spark/data
+    networks:
+      - milan_network
+
+  # ---------------------
+  # Spark Worker 3
+  # ---------------------
+  spark-worker-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: spark-worker-3
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark:7077
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=5g
+      - SPARK_WORKER_WEBUI_PORT=8081
+    depends_on:
+      - spark
+    volumes:
+      - ./scripts:/opt/spark/app
+      - ./data:/opt/spark/data
+    networks:
+      - milan_network
+
+  # ---------------------
+  # Producer
+  # ---------------------
+  producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: producer
+    depends_on:
+      - kafka
+    stdin_open: true
+    tty: true
+    command: tail -f /dev/null
+    volumes:
+      - ./scripts:/opt/spark/app
+      - ./data:/opt/spark/data
+    networks:
+      - milan_network
+
+
+  # ---------------------
+  # MinIO
+  # ---------------------
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./minio-data:/data
+    networks:
+      - milan_network
+
+  # ---------------------
+  # Postgres (Airflow DB)
+  # ---------------------
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    networks:
+      - milan_network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------
+  # Airflow
+  # ---------------------
+  airflow:
+    image: apache/airflow:2.9.2
+    container_name: airflow
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=please_change_me
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=True
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    volumes:
+      - ./init-airflow.sh:/init-airflow.sh
+      - ./dags:/opt/airflow/dags
+      - ./airflow-requirements.txt:/opt/airflow/airflow-requirements.txt
+      - /var/run/docker.sock:/var/run/docker.sock
+    entrypoint: ["/bin/bash", "/init-airflow.sh"]
+    ports:
+      - "8080:8080"
+    networks:
+      - milan_network
+
+# ---------------------
+# Networks
+# ---------------------
+networks:
+  milan_network:
+    driver: bridge
+    external: true

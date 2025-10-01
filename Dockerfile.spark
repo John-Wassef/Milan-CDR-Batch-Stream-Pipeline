@@ -1,0 +1,46 @@
+FROM apache/spark:3.5.0
+
+USER root
+
+RUN apt-get update && \
+    apt-get install -y \
+    curl \
+    python3-pip \
+    build-essential \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --upgrade pip
+
+COPY requirements.txt /tmp/requirements.txt
+
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
+
+COPY scripts/ /opt/spark/app/
+
+ENV SPARK_DRIVER_MEMORY=4g
+ENV SPARK_EXECUTOR_MEMORY=4g
+ENV SPARK_DRIVER_MAX_RESULT_SIZE=2g
+
+ENV SPARK_SQL_ADAPTIVE_ENABLED=true
+ENV SPARK_SQL_ADAPTIVE_COALESCE_PARTITIONS_ENABLED=true
+
+ENV SPARK_HADOOP_FS_S3A_ENDPOINT=http://minio:9000
+ENV SPARK_HADOOP_FS_S3A_PATH_STYLE_ACCESS=true
+ENV SPARK_HADOOP_FS_S3A_ACCESS_KEY=minioadmin
+ENV SPARK_HADOOP_FS_S3A_SECRET_KEY=minioadmin
+ENV SPARK_HADOOP_FS_S3A_IMPL=org.apache.hadoop.fs.s3a.S3AFileSystem
+
+ENV SPARK_HOME=/opt/spark
+
+RUN curl -o $SPARK_HOME/jars/hadoop-aws-3.3.4.jar \
+    https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar   && \
+    curl -o $SPARK_HOME/jars/aws-java-sdk-bundle-1.12.262.jar \
+    https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar  
+
+RUN mkdir -p /home/spark/.ivy2/cache /home/spark/.ivy2/jars && \
+    chown -R spark:spark /home/spark/.ivy2
+
+WORKDIR /opt/spark
+
+USER spark
