@@ -41,7 +41,7 @@ Telecom events with fields like: `cell_id`, `timestamp`, `country_code`, `sms_in
 
 ## 🏗️ System Architecture
 
-![Pipeline Architecture](Milan Project System Architecture.png)
+![Pipeline Architecture](./Milan%20Project%20System%20Architecture.png)
 
 ---
 
