@@ -39,6 +39,12 @@ Telecom events with fields like: `cell_id`, `timestamp`, `country_code`, `sms_in
 
 ---
 
+## 🏗️ System Architecture
+
+![Pipeline Architecture](Milan Project System Architecture.png)
+
+---
+
 ## 🧩 ETL Process
 
 ### Data Cleaning
